@@ -1,2 +1,12 @@
 .nhost
 .secrets
+
+# env/secrets
+.env
+.env.*.local
+
+# local Nhost link/config (machine/env specific)
+.nhost/
+
+# node/yarn/pnpm if you add a web app later
+node_modules
