@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "types": ["vitest/globals", "node"],
+    "lib": ["ES2021", "DOM"],
+    "skipLibCheck": true
+  },
+  "include": ["tests/**/*.ts", "vitest.config.ts"]
+}

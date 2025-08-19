@@ -1,0 +1,3 @@
+table:
+  name: billing_plans
+  schema: public
