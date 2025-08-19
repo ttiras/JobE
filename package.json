@@ -1,0 +1,12 @@
+{
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "dotenv": "^17.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  }
+}
