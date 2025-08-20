@@ -1,20 +1,52 @@
--- Remove only the seed rows inserted by this migration. (No table drops.)
+-- Remove only the seed rows inserted above; do not drop tables.
+
+-- industries_enum
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema='public' AND table_name='industries_enum'
   ) THEN
-    DELETE FROM public.industries_enum WHERE value IN ('CONSUMER');
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='industries_enum' AND column_name='value'
+    ) THEN
+      DELETE FROM public.industries_enum WHERE value IN ('CONSUMER');
+    ELSIF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='industries_enum' AND column_name='code'
+    ) THEN
+      DELETE FROM public.industries_enum WHERE code IN ('CONSUMER');
+    END IF;
   END IF;
+END
+$$;
 
+-- countries_enum
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema='public' AND table_name='countries_enum'
   ) THEN
-    DELETE FROM public.countries_enum WHERE value IN ('TR','US');
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='countries_enum' AND column_name='value'
+    ) THEN
+      DELETE FROM public.countries_enum WHERE value IN ('TR','US');
+    ELSIF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema='public' AND table_name='countries_enum' AND column_name='code'
+    ) THEN
+      DELETE FROM public.countries_enum WHERE code IN ('TR','US');
+    END IF;
   END IF;
+END
+$$;
 
+-- currencies (only remove the pairs we may have inserted)
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema='public' AND table_name='currencies'
