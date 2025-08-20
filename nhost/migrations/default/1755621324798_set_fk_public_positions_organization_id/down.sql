@@ -1,4 +1,4 @@
--- Safe rollback: drop the new-name FK if present; optionally restore the legacy name
+-- Safe rollback: drop new-name FK if present; optionally restore legacy name
 DO $$
 BEGIN
   IF EXISTS (
@@ -10,7 +10,6 @@ BEGIN
       DROP CONSTRAINT positions_organization_id_fkey;
   END IF;
 
-  -- Optional: recreate the old-name FK so "down" works everywhere
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint c
     WHERE c.conname = 'positions_org_fkey'

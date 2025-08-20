@@ -1,9 +1,8 @@
--- Safe rollback: drop the new-name FK if present; optionally restore legacy name
+-- Safe rollback
 DO $$
 BEGIN
   IF EXISTS (
-    SELECT 1
-    FROM pg_constraint c
+    SELECT 1 FROM pg_constraint c
     WHERE c.conname = 'positions_organization_id_fkey'
       AND c.conrelid = 'public.positions'::regclass
   ) THEN
@@ -11,10 +10,8 @@ BEGIN
       DROP CONSTRAINT positions_organization_id_fkey;
   END IF;
 
-  -- Optional legacy name to make "down" work everywhere
   IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint c
+    SELECT 1 FROM pg_constraint c
     WHERE c.conname = 'positions_org_fkey'
       AND c.conrelid = 'public.positions'::regclass
   ) THEN
