@@ -1,0 +1,26 @@
+table:
+  name: countries
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - is_active
+        - sort_order
+        - code
+        - iso3
+        - name_en
+        - name_tr
+      filter: {}
+    comment: ""
+  - role: user
+    permission:
+      columns:
+        - is_active
+        - sort_order
+        - code
+        - iso3
+        - name_en
+        - name_tr
+      filter: {}
+    comment: ""

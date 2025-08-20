@@ -1,0 +1,35 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- -- positions table (no updated_at triggers)
+-- CREATE TABLE IF NOT EXISTS public.positions (
+--   id               uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
+--   organization_id  uuid         NOT NULL,
+--   department_id    uuid         NOT NULL,
+--   pos_code         text         NOT NULL,
+--   title            text         NOT NULL,
+--   reports_to_id    uuid         NULL,
+--   is_manager       boolean      NOT NULL DEFAULT false,
+--   is_active        boolean      NOT NULL DEFAULT true,
+--   incumbents_count integer      NOT NULL DEFAULT 1,  -- integer headcount
+--   deleted_at       timestamptz  NULL,
+--   created_at       timestamptz  NOT NULL DEFAULT now(),
+--   updated_at       timestamptz  NOT NULL DEFAULT now(),
+--
+--   -- FKs
+--   CONSTRAINT positions_org_fkey
+--     FOREIGN KEY (organization_id) REFERENCES public.organizations(id)
+--     ON UPDATE RESTRICT ON DELETE RESTRICT,
+--
+--   CONSTRAINT positions_dept_fkey
+--     FOREIGN KEY (department_id) REFERENCES public.departments(id)
+--     ON UPDATE RESTRICT ON DELETE RESTRICT,
+--
+--   CONSTRAINT positions_reports_to_fkey
+--     FOREIGN KEY (reports_to_id) REFERENCES public.positions(id)
+--     ON UPDATE RESTRICT ON DELETE SET NULL
+-- );
+--
+-- -- partial unique: code unique within org+dept among non-deleted rows
+-- CREATE UNIQUE INDEX IF NOT EXISTS positions_org_dept_code_uniq
+--   ON public.positions (organization_id, department_id, pos_code)
+--   WHERE deleted_at IS NULL;

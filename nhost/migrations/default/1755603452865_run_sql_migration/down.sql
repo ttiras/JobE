@@ -1,0 +1,24 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- -- 1) Drop FK if you added one (safe if it doesn't exist)
+-- ALTER TABLE public.organizations
+--   DROP CONSTRAINT IF EXISTS organizations_currency_fkey;
+--
+-- -- 2) Drop the plain column
+-- ALTER TABLE public.organizations
+--   DROP COLUMN IF EXISTS currency;
+--
+-- -- 3) Recreate as a GENERATED ALWAYS column
+-- ALTER TABLE public.organizations
+--   ADD COLUMN currency text
+--   GENERATED ALWAYS AS (
+--     CASE WHEN country = 'TR' THEN 'TRY' ELSE 'USD' END
+--   ) STORED;
+--
+-- -- 4) Enforce valid codes via FK to currencies(code)
+-- ALTER TABLE public.organizations
+--   ADD CONSTRAINT organizations_currency_fkey
+--   FOREIGN KEY (currency)
+--   REFERENCES public.currencies(code)
+--   ON UPDATE RESTRICT
+--   ON DELETE RESTRICT;

@@ -1,0 +1,8 @@
+-- drop old FK (name may differ)
+ALTER TABLE public.organizations
+  DROP CONSTRAINT IF EXISTS organizations_industry_fkey;
+
+-- add FK to the enum table
+ALTER TABLE public.organizations
+  ADD CONSTRAINT organizations_industry_fkey
+  FOREIGN KEY (industry) REFERENCES public.industries_enum(value);

@@ -2,3 +2,18 @@ table:
   name: org_size
   schema: public
 is_enum: true
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - comment
+        - value
+      filter: {}
+    comment: ""
+  - role: user
+    permission:
+      columns:
+        - comment
+        - value
+      filter: {}
+    comment: ""

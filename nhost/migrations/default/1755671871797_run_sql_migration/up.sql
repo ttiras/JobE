@@ -1,0 +1,39 @@
+-- (A) Make sure positions has UNIQUE(id, organization_id) (needed for the reports_to composite FK)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'positions_id_org_uq'
+      AND conrelid = 'public.positions'::regclass
+  ) THEN
+    ALTER TABLE public.positions
+      ADD CONSTRAINT positions_id_org_uq UNIQUE (id, organization_id);
+  END IF;
+END$$;
+
+-- (B) Same-org department: (department_id, organization_id) -> departments(id, organization_id)
+ALTER TABLE public.positions
+  ADD CONSTRAINT positions_department_same_org_fkey
+  FOREIGN KEY (department_id, organization_id)
+  REFERENCES public.departments (id, organization_id)
+  ON UPDATE CASCADE
+  ON DELETE RESTRICT
+  DEFERRABLE INITIALLY IMMEDIATE;
+
+-- (C) Same-org manager chain: (reports_to_id, organization_id) -> positions(id, organization_id)
+ALTER TABLE public.positions
+  ADD CONSTRAINT positions_reports_to_same_org_fkey
+  FOREIGN KEY (reports_to_id, organization_id)
+  REFERENCES public.positions (id, organization_id)
+  ON UPDATE CASCADE
+  ON DELETE SET NULL
+  DEFERRABLE INITIALLY IMMEDIATE;
+
+-- (D) Perf indexes (optional but recommended)
+CREATE INDEX IF NOT EXISTS positions_dept_org_idx
+  ON public.positions (department_id, organization_id)
+  WHERE department_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS positions_reports_to_org_idx
+  ON public.positions (reports_to_id, organization_id)
+  WHERE reports_to_id IS NOT NULL;

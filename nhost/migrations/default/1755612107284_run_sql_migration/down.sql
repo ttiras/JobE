@@ -1,0 +1,54 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- -- 1) helpers
+-- CREATE EXTENSION IF NOT EXISTS unaccent;
+--
+-- CREATE OR REPLACE FUNCTION public.slugify(txt text)
+-- RETURNS text
+-- LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+--   SELECT trim(both '-' FROM
+--          lower(regexp_replace(unaccent($1), '[^a-zA-Z0-9]+', '-', 'g')))
+-- $$;
+--
+-- CREATE OR REPLACE FUNCTION public.gen_org_slug(base_name text)
+-- RETURNS text
+-- LANGUAGE plpgsql STABLE AS $$
+-- DECLARE
+--   base text := coalesce(nullif(public.slugify(base_name), ''), 'org');
+--   out  text := base;
+--   n    int  := 1;
+-- BEGIN
+--   -- bump suffix until unique among active rows
+--   WHILE EXISTS (
+--     SELECT 1 FROM public.organizations
+--     WHERE slug = out AND deleted_at IS NULL
+--   ) LOOP
+--     n := n + 1;
+--     out := base || '-' || n;
+--   END LOOP;
+--   RETURN out;
+-- END
+-- $$;
+--
+-- -- 2) trigger to fill slug on INSERT (only if not provided)
+-- CREATE OR REPLACE FUNCTION public.organizations_set_slug()
+-- RETURNS trigger
+-- LANGUAGE plpgsql AS $$
+-- BEGIN
+--   IF NEW.slug IS NULL OR btrim(NEW.slug) = '' THEN
+--     NEW.slug := public.gen_org_slug(NEW.name);
+--   END IF;
+--   RETURN NEW;
+-- END
+-- $$;
+--
+-- DROP TRIGGER IF EXISTS organizations_set_slug_bi ON public.organizations;
+-- CREATE TRIGGER organizations_set_slug_bi
+-- BEFORE INSERT ON public.organizations
+-- FOR EACH ROW
+-- EXECUTE FUNCTION public.organizations_set_slug();
+--
+-- -- 3) unique among non-deleted rows
+-- CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_active
+--   ON public.organizations(slug)
+--   WHERE deleted_at IS NULL;

@@ -1,0 +1,28 @@
+table:
+  name: industries
+  schema: public
+select_permissions:
+  - role: anonymous
+    permission:
+      columns:
+        - is_active
+        - sort_order
+        - label_en
+        - label_tr
+        - value
+        - created_at
+        - updated_at
+      filter: {}
+    comment: ""
+  - role: user
+    permission:
+      columns:
+        - is_active
+        - sort_order
+        - label_en
+        - label_tr
+        - value
+        - created_at
+        - updated_at
+      filter: {}
+    comment: ""

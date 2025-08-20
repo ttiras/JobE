@@ -1,0 +1,59 @@
+-- 0) Ensure referenced tables have a UNIQUE (id, organization_id)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'departments_id_org_uq'
+  ) THEN
+    ALTER TABLE public.departments
+      ADD CONSTRAINT departments_id_org_uq UNIQUE (id, organization_id);
+  END IF;
+END$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'positions_id_org_uq'
+  ) THEN
+    ALTER TABLE public.positions
+      ADD CONSTRAINT positions_id_org_uq UNIQUE (id, organization_id);
+  END IF;
+END$$;
+
+-- 1) positions.department_id must be in the SAME org
+ALTER TABLE public.positions
+  DROP CONSTRAINT IF EXISTS positions_department_same_org_fkey,
+  DROP CONSTRAINT IF EXISTS positions_dept_fkey,
+  ADD CONSTRAINT positions_department_same_org_fkey
+    FOREIGN KEY (department_id, organization_id)
+    REFERENCES public.departments(id, organization_id)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT;
+
+-- 2) departments.parent_id must be in the SAME org (null if parent removed)
+ALTER TABLE public.departments
+  DROP CONSTRAINT IF EXISTS departments_parent_same_org_fkey,
+  DROP CONSTRAINT IF EXISTS departments_parent_fkey,
+  DROP CONSTRAINT IF EXISTS departments_parent_id_fkey,
+  ADD CONSTRAINT departments_parent_same_org_fkey
+    FOREIGN KEY (parent_id, organization_id)
+    REFERENCES public.departments(id, organization_id)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL;
+
+-- 3) positions.reports_to_id must be in the SAME org (null if manager removed)
+ALTER TABLE public.positions
+  DROP CONSTRAINT IF EXISTS positions_reports_to_same_org_fkey,
+  DROP CONSTRAINT IF EXISTS positions_reports_to_fkey,
+  ADD CONSTRAINT positions_reports_to_same_org_fkey
+    FOREIGN KEY (reports_to_id, organization_id)
+    REFERENCES public.positions(id, organization_id)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL
+    DEFERRABLE INITIALLY IMMEDIATE;
+
+-- 4) Helpful indexes on referencing columns
+CREATE INDEX IF NOT EXISTS idx_positions_department_org  ON public.positions(department_id, organization_id);
+CREATE INDEX IF NOT EXISTS idx_positions_reports_to_org ON public.positions(reports_to_id, organization_id);
+CREATE INDEX IF NOT EXISTS idx_departments_parent_org    ON public.departments(parent_id, organization_id);

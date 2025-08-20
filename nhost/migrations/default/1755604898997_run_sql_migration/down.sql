@@ -1,0 +1,6 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- CREATE TABLE public.industries_enum (
+--   value   text PRIMARY KEY,
+--   comment text
+-- );

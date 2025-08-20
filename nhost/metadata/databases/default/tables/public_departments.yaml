@@ -1,3 +1,68 @@
 table:
   name: departments
   schema: public
+object_relationships:
+  - name: organization
+    using:
+      foreign_key_constraint_on: organization_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        organization:
+          created_by:
+            _eq: X-Hasura-User-Id
+      columns:
+        - created_at
+        - dept_code
+        - id
+        - is_active
+        - metadata
+        - name
+        - organization_id
+        - parent_id
+        - updated_at
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - created_at
+        - dept_code
+        - id
+        - is_active
+        - metadata
+        - name
+        - organization_id
+        - parent_id
+        - updated_at
+      filter:
+        organization:
+          created_by:
+            _eq: X-Hasura-User-Id
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - dept_code
+        - is_active
+        - metadata
+        - name
+        - organization_id
+        - parent_id
+        - updated_at
+      filter: {}
+      check:
+        organization:
+          created_by:
+            _eq: X-Hasura-User-Id
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        organization:
+          created_by:
+            _eq: X-Hasura-User-Id
+    comment: ""

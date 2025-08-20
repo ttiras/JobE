@@ -1,0 +1,5 @@
+-- Could not auto-generate a down migration.
+-- Please write an appropriate down migration for the SQL below:
+-- ALTER TABLE public.currencies
+--   DROP COLUMN IF EXISTS created_at,
+--   DROP COLUMN IF EXISTS updated_at;

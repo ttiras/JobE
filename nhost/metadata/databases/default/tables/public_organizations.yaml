@@ -1,3 +1,79 @@
 table:
   name: organizations
   schema: public
+object_relationships:
+  - name: user
+    using:
+      foreign_key_constraint_on: created_by
+array_relationships:
+  - name: departments
+    using:
+      foreign_key_constraint_on:
+        column: organization_id
+        table:
+          name: departments
+          schema: public
+  - name: positions
+    using:
+      foreign_key_constraint_on:
+        column: organization_id
+        table:
+          name: positions
+          schema: public
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        created_by:
+          _eq: X-Hasura-User-Id
+      set:
+        created_by: x-hasura-User-Id
+      columns:
+        - country
+        - created_at
+        - id
+        - industry
+        - is_active
+        - name
+        - parent_organization_id
+        - settings
+        - size
+        - updated_at
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - country
+        - created_at
+        - created_by
+        - currency
+        - id
+        - industry
+        - is_active
+        - name
+        - parent_organization_id
+        - settings
+        - size
+        - updated_at
+      filter:
+        created_by:
+          _eq: X-Hasura-User-Id
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - country
+        - industry
+        - is_active
+        - name
+        - parent_organization_id
+        - settings
+        - size
+        - updated_at
+      filter:
+        created_by:
+          _eq: X-Hasura-User-Id
+      check: null
+    comment: ""
