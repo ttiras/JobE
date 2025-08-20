@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:run:staging": "DOTENV_CONFIG_PATH=.env.staging vitest run"
   }
 }

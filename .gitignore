@@ -4,6 +4,7 @@
 # env/secrets
 .env
 .env.*.local
+.env.staging
 
 # node/yarn/pnpm if you add a web app later
 node_modules
