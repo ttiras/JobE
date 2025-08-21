@@ -1,4 +1,3 @@
-// tests/integration/relationships.nested-selects.test.ts
 import { describe, it, expect } from 'vitest';
 import { getSession } from '../helpers/auth';
 
@@ -13,26 +12,18 @@ async function gql<T>(q: string, vars?: Record<string, unknown>, token?: string)
   return res.json() as Promise<T>;
 }
 
-async function getEnumValues(typeName: string, token?: string) {
-  const q = `query($n:String!){ __type(name:$n){ enumValues{ name } } }`;
-  const r: any = await gql(q, { n: typeName }, token);
-  return r?.data?.__type?.enumValues?.map((e: any) => e.name) ?? [];
-}
-
-async function pickEnum(typeName: string, prefer?: string[], token?: string) {
-  const vals = await getEnumValues(typeName, token);
-  if (!vals.length) throw new Error(`Enum ${typeName} has no values`);
-  if (prefer) for (const p of prefer) if (vals.includes(p)) return p;
-  return vals[0];
-}
+// --- helpers -------------------------------------------------------------
 
 async function createOrg(token: string, name: string) {
-  const industry = await pickEnum('industries_enum_enum', undefined, token);
-  const size     = await pickEnum('org_size_enum', ['S51_200','S201_500','S11_50','S2_10'], token);
-  const country  = await pickEnum('countries_enum_enum', ['TR','US'], token);
+  const industry = 'CONSUMER';         // any valid industries_enum_enum
+  const size = 'S2_10';            // one fixed org_size_enum
+  const country = 'TR';            // or 'US'
+
   const m = `
     mutation($name:String!,$industry:industries_enum_enum!,$country:countries_enum_enum!,$size:org_size_enum!){
-      insert_organizations_one(object:{name:$name,industry:$industry,country:$country,size:$size}){ id }
+      insert_organizations_one(object:{
+        name:$name, industry:$industry, country:$country, size:$size
+      }) { id }
     }`;
   const r: any = await gql(m, { name, industry, country, size }, token);
   return r?.data?.insert_organizations_one?.id as string;
@@ -41,7 +32,9 @@ async function createOrg(token: string, name: string) {
 async function createDept(token: string, organization_id: string, dept_code: string, name: string) {
   const m = `
     mutation($organization_id:uuid!, $dept_code:String!, $name:String!){
-      insert_departments_one(object:{organization_id:$organization_id,dept_code:$dept_code,name:$name}){ id }
+      insert_departments_one(object:{
+        organization_id:$organization_id, dept_code:$dept_code, name:$name
+      }){ id }
     }`;
   const r: any = await gql(m, { organization_id, dept_code, name }, token);
   return r?.data?.insert_departments_one?.id as string;
@@ -58,11 +51,16 @@ async function createPos(token: string, organization_id: string, department_id: 
   return r?.data?.insert_positions_one?.id as string;
 }
 
+// --- tests ---------------------------------------------------------------
+
 describe('relationships: nested selects', () => {
   it(
     'positions expose department and organization fields and they resolve',
     async () => {
-      const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
+      const { token } = await getSession(
+        process.env.NHOST_TEST_EMAIL_A!,
+        process.env.NHOST_TEST_PASSWORD_A!
+      );
 
       const orgId = await createOrg(token, `REL ORG ${Date.now()}`);
       const deptId = await createDept(token, orgId, 'REL-ENG', 'Engineering');

@@ -19,30 +19,22 @@ async function gql<T>(q: string, vars?: any, token?: string): Promise<T> {
     },
     body: JSON.stringify({ query: q, variables: vars }),
   });
-  // IMPORTANT: do NOT throw on GraphQL errors — tests will assert on r.errors
+  // don’t throw on errors — tests assert on them
   return res.json() as Promise<T>;
 }
 
-async function enumValues(name: string, token: string): Promise<string[]> {
-  const q = `query($n:String!){ __type(name:$n){ enumValues{ name } } }`;
-  const r: any = await gql(q, { n: name }, token);
-  return r?.data?.__type?.enumValues?.map((e: any) => e.name) ?? [];
-}
+// --- helpers -------------------------------------------------------------
 
-async function pickEnum(name: string, token: string, prefer?: string[]): Promise<string> {
-  const vals = await enumValues(name, token);
-  if (!vals.length) throw new Error(`Enum ${name} has no values`);
-  if (prefer) for (const p of prefer) if (vals.includes(p)) return p;
-  return vals[0];
-}
+async function createOrg(token: string, name: string, countryPref: string = 'US') {
+  const industry = 'CONSUMER';     // fixed industries_enum_enum
+  const size = 'S2_10';        // fixed org_size_enum
+  const country = countryPref; // use arg, default US
 
-async function createOrg(token: string, name: string, countryPref?: string) {
-  const industry = await pickEnum('industries_enum_enum', token);
-  const size = await pickEnum('org_size_enum', token, ['S51_200','S201_500','S11_50','S2_10']);
-  const country = await pickEnum('countries_enum_enum', token, [countryPref ?? 'US','TR']);
   const m = `
     mutation($name:String!,$industry:industries_enum_enum!,$country:countries_enum_enum!,$size:org_size_enum!){
-      insert_organizations_one(object:{name:$name,industry:$industry,country:$country,size:$size}){ id }
+      insert_organizations_one(object:{
+        name:$name, industry:$industry, country:$country, size:$size
+      }){ id }
     }`;
   const r: any = await gql(m, { name, industry, country, size }, token);
   return r?.data?.insert_organizations_one?.id as string;
@@ -51,11 +43,17 @@ async function createOrg(token: string, name: string, countryPref?: string) {
 async function createDept(token: string, organization_id: string, dept_code: string, name: string) {
   const m = `
     mutation($organization_id:uuid!, $dept_code:String!, $name:String!){
-      insert_departments_one(object:{organization_id:$organization_id,dept_code:$dept_code,name:$name}){ id }
+      insert_departments_one(object:{
+        organization_id:$organization_id, dept_code:$dept_code, name:$name
+      }){ id }
     }`;
   const r: any = await gql(m, { organization_id, dept_code, name }, token);
+
+  if (r.errors) throw new Error(JSON.stringify(r.errors));
   return r?.data?.insert_departments_one?.id as string;
 }
+
+// --- tests ---------------------------------------------------------------
 
 describe('departments: unique code per org (hard deletes)', () => {
   it('blocks duplicate dept_code in same org; allows across orgs; reinsert after delete works', async () => {

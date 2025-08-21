@@ -1,41 +1,21 @@
-// tests/integration/delete.behaviors.test.ts
 import { describe, it, expect } from 'vitest';
-import { gqlA, graphqlFetch, testSuffix } from '../helpers/auth';
+import { gqlA, testSuffix } from '../helpers/auth';
 
-// --- org_size still comes from enum via introspection (stable in your DB) ---
-type EnumIntrospection = { __type?: { enumValues?: { name: string }[] } };
-
-async function getEnumValues(typeName: string): Promise<string[]> {
-  const q = /* GraphQL */ `
-    query($n: String!) { __type(name: $n) { enumValues { name } } }
-  `;
-  const data = await gqlA<EnumIntrospection>(q, { n: typeName });
-  return data.__type?.enumValues?.map(v => v.name) ?? [];
-}
-
-async function pickEnum(typeName: string, prefer?: string[]) {
-  const vals = await getEnumValues(typeName);
-  if (!vals.length) throw new Error(`Enum ${typeName} has no values`);
-  if (prefer) for (const p of prefer) if (vals.includes(p)) return p;
-  return vals[0];
-}
+// --- Stable enum literals (hard-coded) ---------------------------------------
+const ORG_SIZE: 'S2_10' = 'S2_10';        // one valid literal
+const COUNTRY = 'TR';                     // stable country enum
+const INDUSTRY = 'CONSUMER';              // stable industry enum
 
 // --- Create helpers (User A) -------------------------------------------------
 async function createOrg(name: string): Promise<string> {
-  // Use enum literals so we don't depend on seed rows for countries/industries
-  const size = await pickEnum('org_size_enum');
-
   const m = /* GraphQL */ `
-    mutation($name:String!,$size:org_size_enum!){
+    mutation($name:String!){
       insert_organizations_one(
-        object:{ name:$name, country:TR, size:$size, industry:CONSUMER }
+        object:{ name:$name, country:${COUNTRY}, size:${ORG_SIZE}, industry:${INDUSTRY} }
       ){ id }
     }
   `;
-  const d = await gqlA<{ insert_organizations_one: { id: string } }>(m, {
-    name,
-    size,
-  });
+  const d = await gqlA<{ insert_organizations_one: { id: string } }>(m, { name });
   return d.insert_organizations_one.id;
 }
 
@@ -111,11 +91,8 @@ describe('delete behaviors', () => {
     const ts = testSuffix('del');
     const org = await createOrg(`DEL ORG ${ts}`);
     const root = await createDept(org, 'ROOT', 'Root');
-    const child = await createDept(org, 'CHILD', 'Child', root); // parent set at insert
+    const child = await createDept(org, 'CHILD', 'Child', root);
 
-    // IMPORTANT: With composite FK (organization_id, parent_id) and org_id NOT NULL,
-    // ON DELETE SET NULL would try to nullify BOTH columns → violates NOT NULL on org_id.
-    // So we DETACH child first (set parent_id = NULL), then delete the parent.
     await gqlA(
       /* GraphQL */ `
         mutation($id:uuid!){
@@ -145,7 +122,6 @@ describe('delete behaviors', () => {
     const mgr = await createPos(org, dept, 'Mgr', 'OPS-MGR');
     const sub = await createPos(org, dept, 'Analyst', 'OPS-AN1', mgr);
 
-    // Same composite-FK reasoning: nullify reports_to_id BEFORE deleting the manager.
     await gqlA(
       /* GraphQL */ `
         mutation($id:uuid!){
@@ -179,7 +155,6 @@ describe('delete behaviors', () => {
     );
     expect(del.delete_departments_by_pk?.id).toBe(dept);
 
-    // Verify the position row is gone due to ON DELETE CASCADE
     const after = await getPosById(pos);
     expect(after).toBeNull();
   });

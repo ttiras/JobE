@@ -1,24 +1,6 @@
-// tests/integration/org.organizations.insert.read.test.ts
 import { describe, it, expect } from 'vitest';
 import { gqlA, sessionA, testSuffix } from '../helpers/auth';
 
-// --- enum helpers (via User A token) -----------------------------------------
-type EnumVals = { __type?: { enumValues?: { name: string }[] } };
-
-async function enumValues(name: string): Promise<string[]> {
-  const q = /* GraphQL */ `query($t:String!){ __type(name:$t){ enumValues { name } } }`;
-  const d = await gqlA<EnumVals>(q, { t: name });
-  return d.__type?.enumValues?.map(v => v.name) ?? [];
-}
-
-async function pickEnum(name: string, prefer?: string[]) {
-  const vals = await enumValues(name);
-  if (!vals.length) throw new Error(`Enum ${name} has no values`);
-  if (prefer) for (const p of prefer) if (vals.includes(p)) return p;
-  return vals[0];
-}
-
-// --- test --------------------------------------------------------------------
 describe('org insert/read with real user', () => {
   it(
     'inserts an org using all required fields and reads it back',
@@ -26,12 +8,12 @@ describe('org insert/read with real user', () => {
       const { userId } = await sessionA();
       const ts = testSuffix('org-read');
 
-      // NOTE: in your schema these are *_enum_enum, not *_enum
-      const industry = await pickEnum('industries_enum_enum');
-      const country  = await pickEnum('countries_enum_enum', ['TR', 'US']);
-      const size     = await pickEnum('org_size_enum');
+      // hard-coded enums instead of introspection
+      const industry = 'CONSUMER';   // industries_enum_enum
+      const country  = 'US';     // countries_enum_enum
+      const size     = 'S2_10';  // org_size_enum
 
-      const expectedCurrency = country === 'TR' ? 'TRY' : 'USD';
+      const expectedCurrency = 'USD';
 
       const insert = /* GraphQL */ `
         mutation($name:String!,$industry:industries_enum_enum!,$country:countries_enum_enum!,$size:org_size_enum!){

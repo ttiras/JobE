@@ -1,7 +1,30 @@
-// tests/integration/auth.multiuser.isolation.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { getSession } from '../helpers/auth';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Staging-aware timeouts
+// ─────────────────────────────────────────────────────────────────────────────
+const IS_STAGING =
+  (process.env.DOTENV_CONFIG_PATH ?? '').includes('staging') ||
+  process.env.NODE_ENV === 'staging' ||
+  process.env.CI === 'true';
+
+const HOOK_TIMEOUT = IS_STAGING ? 90_000 : 40_000;  // beforeAll/afterAll
+const IT_TIMEOUT   = IS_STAGING ? 90_000 : 40_000;  // the long scenario
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hard-coded enums (kept in sync with Hasura migrations/metadata)
+// ─────────────────────────────────────────────────────────────────────────────
+const ENUMS = {
+  SIZE: 'S2_10' as const,
+  INDUSTRY: 'CONSUMER' as const,
+  TR: 'TR' as const,
+  US: 'US' as const,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Endpoint
+// ─────────────────────────────────────────────────────────────────────────────
 const ENDPOINT =
   process.env.NHOST_GRAPHQL_URL?.trim() ||
   process.env.HASURA_GRAPHQL_ENDPOINT?.trim() ||
@@ -11,7 +34,9 @@ if (!ENDPOINT) {
   throw new Error('GraphQL endpoint missing. Set NHOST_GRAPHQL_URL or HASURA_GRAPHQL_ENDPOINT.');
 }
 
-// non-throwing gql (so we can assert on .errors for negative cases)
+// ─────────────────────────────────────────────────────────────────────────────
+// Non-throwing gql (so we can assert on .errors for negative cases)
+// ─────────────────────────────────────────────────────────────────────────────
 async function gql<T>(
   query: string,
   variables?: Record<string, unknown>,
@@ -28,29 +53,9 @@ async function gql<T>(
   return res.json() as Promise<T>;
 }
 
-async function getEnumValues(typeName: string, token: string): Promise<string[]> {
-  const q = `
-    query($t: String!) {
-      __type(name: $t) {
-        enumValues { name }
-      }
-    }
-  `;
-  const r: any = await gql(q, { t: typeName }, token);
-  return r?.data?.__type?.enumValues?.map((v: any) => v.name) ?? [];
-}
-
-async function pickEnum(
-  typeName: string,
-  token: string,
-  preferred?: string[]
-): Promise<string> {
-  const values = await getEnumValues(typeName, token);
-  if (!values.length) throw new Error(`Enum ${typeName} has no values`);
-  if (preferred) for (const p of preferred) if (values.includes(p)) return p;
-  return values[0];
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Small helpers (pure GraphQL, sequential calls)
+// ─────────────────────────────────────────────────────────────────────────────
 async function createOrg(
   token: string,
   name: string,
@@ -139,31 +144,38 @@ async function createPos(
     | undefined;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Warm-up: sign in once for both users (sequential to avoid 429 on staging)
+// ─────────────────────────────────────────────────────────────────────────────
+let token1 = '';
+let token2 = '';
+let u1 = '';
+let u2 = '';
+
+beforeAll(async () => {
+  const s1 = await getSession(
+    process.env.NHOST_TEST_EMAIL_A!,
+    process.env.NHOST_TEST_PASSWORD_A!
+  );
+  token1 = s1.token; u1 = s1.userId;
+
+  const s2 = await getSession(
+    process.env.NHOST_TEST_EMAIL_B!,
+    process.env.NHOST_TEST_PASSWORD_B!
+  );
+  token2 = s2.token; u2 = s2.userId;
+}, HOOK_TIMEOUT);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test
+// ─────────────────────────────────────────────────────────────────────────────
 describe('multi-user isolation + same-org safety', () => {
   it(
     'each user can only see/mutate their own org/dept/pos; composite FKs block cross-org refs',
     async () => {
-      const { token: token1, userId: u1 } = await getSession(
-        process.env.NHOST_TEST_EMAIL_A!,
-        process.env.NHOST_TEST_PASSWORD_A!
-      );
-      const { token: token2, userId: u2 } = await getSession(
-        process.env.NHOST_TEST_EMAIL_B!,
-        process.env.NHOST_TEST_PASSWORD_B!
-      );
-
-      // enums
-      const size = await pickEnum('org_size_enum', token1, [
-        'S11_50','S51_200','S201_500','S2_10','S501_1000','S1001_5000','S10001_PLUS'
-      ]);
-      const industry = await pickEnum('industries_enum_enum', token1);
-      const countries = await getEnumValues('countries_enum_enum', token1);
-      const TR = countries.includes('TR') ? 'TR' : countries[0];
-      const US = countries.find((c) => c !== TR) ?? countries[0];
-
       // Create separate orgs
-      const orgA = await createOrg(token1, `Org A ${Date.now()}`, TR, industry, size);
-      const orgB = await createOrg(token2, `Org B ${Date.now()}`, US, industry, size);
+      const orgA = await createOrg(token1, `Org A ${Date.now()}`, ENUMS.TR, ENUMS.INDUSTRY, ENUMS.SIZE);
+      const orgB = await createOrg(token2, `Org B ${Date.now()}`, ENUMS.US, ENUMS.INDUSTRY, ENUMS.SIZE);
 
       expect(orgA?.created_by).toBe(u1);
       expect(orgB?.created_by).toBe(u2);
@@ -244,11 +256,12 @@ describe('multi-user isolation + same-org safety', () => {
         const umsg = (utry.errors ?? [])
           .map((e: any) => String(e.message).toLowerCase())
           .join(' | ');
-expect(umsg).toMatch(/not authorized|no update permission|forbidden|check constraint/i);
+        expect(umsg).toMatch(/not authorized|no update permission|forbidden|check constraint/i);
       } else {
+        // Some RLS configs return null without error
         expect(utry?.data?.update_departments_by_pk ?? null).toBeNull();
       }
     },
-    20_000
+    IT_TIMEOUT
   );
 });

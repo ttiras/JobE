@@ -8,3 +8,7 @@
 
 # node/yarn/pnpm if you add a web app later
 node_modules
+
+vitest.config.ts
+
+.vscode

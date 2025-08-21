@@ -1,11 +1,15 @@
-// tests/integration/positions.departments.safety-and-rls.test.ts
 import { describe, it, expect } from 'vitest';
 import { getSession } from '../helpers/auth';
 
 const ENDPOINT = process.env.HASURA_GRAPHQL_ENDPOINT!;
+
+// Stable enum literals (hard-coded)
 const TR = 'TR';
 const US = 'US';
+const ORG_SIZE: 'S2_10' = 'S2_10';
+const INDUSTRY: 'CONSUMER' = 'CONSUMER';
 
+// --- Generic gql helper ------------------------------------------------------
 async function gql<T>(
   query: string,
   variables?: Record<string, unknown>,
@@ -22,40 +26,21 @@ async function gql<T>(
   return res.json() as Promise<T>;
 }
 
-async function getEnumValues(typeName: string, token?: string) {
-  const q = `query($name:String!){ __type(name:$name){ enumValues{ name } } }`;
-  const r: any = await gql(q, { name: typeName }, token);
-  return r?.data?.__type?.enumValues?.map((e: any) => e.name) ?? [];
-}
-
-async function pickEnum(
-  typeName: string,
-  preferred?: string[],
-  token?: string
-): Promise<string> {
-  const values = await getEnumValues(typeName, token);
-  if (!values.length) throw new Error(`Enum ${typeName} has no values`);
-  if (preferred) {
-    for (const p of preferred) if (values.includes(p)) return p;
-  }
-  return values[0];
-}
-
-async function createOrg(token: string, name: string, countryPref?: string) {
-  const industry = await pickEnum('industries_enum_enum', undefined, token);
-  const size     = await pickEnum('org_size_enum', ['S51_200','S201_500','S11_50','S2_10'], token);
-  const country  = await pickEnum('countries_enum_enum', [countryPref ?? 'TR', 'US'], token);
-
+// --- Create helpers ----------------------------------------------------------
+async function createOrg(token: string, name: string, country: string) {
   const insert = `
-    mutation($name:String!,$industry:industries_enum_enum!,$country:countries_enum_enum!,$size:org_size_enum!){
+    mutation($name:String!){
       insert_organizations_one(object:{
-        name:$name, industry:$industry, country:$country, size:$size
+        name:$name, 
+        industry:${INDUSTRY}, 
+        country:${country}, 
+        size:${ORG_SIZE}
       }){
         id name created_by country currency industry size
       }
     }
   `;
-  const r: any = await gql(insert, { name, industry, country, size }, token);
+  const r: any = await gql(insert, { name }, token);
   if (r.errors) console.error('createOrg errors:', r.errors);
   return r?.data?.insert_organizations_one as {
     id: string;
@@ -119,85 +104,74 @@ function expectErrorMsg(errors: any[], re: RegExp) {
   expect(msg).toMatch(re);
 }
 
+// --- Tests -------------------------------------------------------------------
 describe('DB safety rails + RLS', () => {
-  it(
-    'composite FK: position cannot point to a department from another org',
-    async () => {
-      const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
+  it('composite FK: position cannot point to a department from another org', async () => {
+    const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
 
-      const orgA = await createOrg(token, `ACME A ${Date.now()}`, TR);
-      const orgB = await createOrg(token, `ACME B ${Date.now()}`, US);
+    const orgA = await createOrg(token, `ACME A ${Date.now()}`, TR);
+    const orgB = await createOrg(token, `ACME B ${Date.now()}`, US);
 
-      const deptA = await createDept(token, orgA.id, 'A-ENG', 'Engineering');
-      const deptB = await createDept(token, orgB.id, 'B-SLS', 'Sales');
+    const deptA = await createDept(token, orgA.id, 'A-ENG', 'Engineering');
+    const deptB = await createDept(token, orgB.id, 'B-SLS', 'Sales');
 
-      const posA = await createPos(token, orgA.id, deptA.id, 'Backend Dev', 'ENG-001');
-      expect(posA.organization_id).toBe(orgA.id);
+    const posA = await createPos(token, orgA.id, deptA.id, 'Backend Dev', 'ENG-001');
+    expect(posA.organization_id).toBe(orgA.id);
 
-      const upd = `
-        mutation($id:uuid!, $dept:uuid!){
-          update_positions_by_pk(pk_columns:{id:$id}, _set:{department_id:$dept}) {
-            id
-          }
+    const upd = `
+      mutation($id:uuid!, $dept:uuid!){
+        update_positions_by_pk(pk_columns:{id:$id}, _set:{department_id:$dept}) {
+          id
         }
-      `;
-      const r: any = await gql(upd, { id: posA.id, dept: deptB.id }, token);
-      expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
-    },
-    20_000
-  );
+      }
+    `;
+    const r: any = await gql(upd, { id: posA.id, dept: deptB.id }, token);
+    expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
+  }, 20_000);
 
-  it(
-    'composite FK: reports_to must be in the same org',
-    async () => {
-      const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
+  it('composite FK: reports_to must be in the same org', async () => {
+    const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
 
-      const orgA = await createOrg(token, `ORG A ${Date.now()}`, TR);
-      const orgB = await createOrg(token, `ORG B ${Date.now()}`, US);
+    const orgA = await createOrg(token, `ORG A ${Date.now()}`, TR);
+    const orgB = await createOrg(token, `ORG B ${Date.now()}`, US);
 
-      const deptA = await createDept(token, orgA.id, 'A-PROD', 'Product');
-      const deptB = await createDept(token, orgB.id, 'B-PROD', 'Product');
+    const deptA = await createDept(token, orgA.id, 'A-PROD', 'Product');
+    const deptB = await createDept(token, orgB.id, 'B-PROD', 'Product');
 
-      const pA1 = await createPos(token, orgA.id, deptA.id, 'A Manager', 'A-001');
-      const pB1 = await createPos(token, orgB.id, deptB.id, 'B Manager', 'B-001');
+    const pA1 = await createPos(token, orgA.id, deptA.id, 'A Manager', 'A-001');
+    const pB1 = await createPos(token, orgB.id, deptB.id, 'B Manager', 'B-001');
 
-      const upd = `
-        mutation($id:uuid!, $boss:uuid!){
-          update_positions_by_pk(pk_columns:{id:$id}, _set:{reports_to_id:$boss}) {
-            id
-          }
+    const upd = `
+      mutation($id:uuid!, $boss:uuid!){
+        update_positions_by_pk(pk_columns:{id:$id}, _set:{reports_to_id:$boss}) {
+          id
         }
-      `;
-      const r: any = await gql(upd, { id: pA1.id, boss: pB1.id }, token);
-      expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
-    },
-    20_000
-  );
+      }
+    `;
+    const r: any = await gql(upd, { id: pA1.id, boss: pB1.id }, token);
+    expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
+  }, 20_000);
 
-  it(
-    'composite FK: department.parent must stay in the same org',
-    async () => {
-      const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
+  it('composite FK: department.parent must stay in the same org', async () => {
+    const { token } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
 
-      const orgA = await createOrg(token, `PARENT A ${Date.now()}`, TR);
-      const orgB = await createOrg(token, `PARENT B ${Date.now()}`, US);
+    const orgA = await createOrg(token, `PARENT A ${Date.now()}`, TR);
+    const orgB = await createOrg(token, `PARENT B ${Date.now()}`, US);
 
-      const rootA = await createDept(token, orgA.id, 'A-ROOT', 'Root A');
-      const childA = await createDept(token, orgA.id, 'A-CHILD', 'Child A');
-      const rootB = await createDept(token, orgB.id, 'B-ROOT', 'Root B');
+    const rootA = await createDept(token, orgA.id, 'A-ROOT', 'Root A');
+    const childA = await createDept(token, orgA.id, 'A-CHILD', 'Child A');
+    const rootB = await createDept(token, orgB.id, 'B-ROOT', 'Root B');
 
-      const upd = `
-        mutation($id:uuid!, $parent:uuid){
-          update_departments_by_pk(pk_columns:{id:$id}, _set:{parent_id:$parent}) {
-            id
-          }
+    const upd = `
+      mutation($id:uuid!, $parent:uuid){
+        update_departments_by_pk(pk_columns:{id:$id}, _set:{parent_id:$parent}) {
+          id
         }
-      `;
-      const r: any = await gql(upd, { id: childA.id, parent: rootB.id }, token);
-      expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
-    },
-    20_000
-  );
+      }
+    `;
+    const r: any = await gql(upd, { id: childA.id, parent: rootB.id }, token);
+    expectErrorMsg(r.errors, /foreign key|violates|constraint/i);
+  }, 20_000);
 
   it('RLS: anonymous cannot query or insert positions', async () => {
     // select
@@ -223,21 +197,17 @@ describe('DB safety rails + RLS', () => {
     expect(insMsg).toMatch(/not authorized|no insert permission|forbidden|validation-failed|no mutations exist/);
   });
 
-  it(
-    'organizations: currency defaults by country (TRY for TR, USD otherwise)',
-    async () => {
-      const { token, userId } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
+  it('organizations: currency defaults by country (TRY for TR, USD otherwise)', async () => {
+    const { token, userId } = await getSession(process.env.NHOST_TEST_EMAIL_A!, process.env.NHOST_TEST_PASSWORD_A!);
 
-      const tr = await createOrg(token, `TR Org ${Date.now()}`, TR);
-      const us = await createOrg(token, `US Org ${Date.now()}`, US);
+    const tr = await createOrg(token, `TR Org ${Date.now()}`, TR);
+    const us = await createOrg(token, `US Org ${Date.now()}`, US);
 
-      expect(tr.created_by).toBe(userId);
-      expect(us.created_by).toBe(userId);
-      expect(tr.country).toBe(TR);
-      expect(us.country).toBe(US);
-      expect(tr.currency).toBe('TRY');
-      expect(us.currency).toBe('USD');
-    },
-    20_000
-  );
+    expect(tr.created_by).toBe(userId);
+    expect(us.created_by).toBe(userId);
+    expect(tr.country).toBe(TR);
+    expect(us.country).toBe(US);
+    expect(tr.currency).toBe('TRY');
+    expect(us.currency).toBe('USD');
+  }, 20_000);
 });

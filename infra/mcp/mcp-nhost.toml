@@ -1,0 +1,17 @@
+[cloud]
+pat = "f1bb0d56-e1d2-4bb5-8a41-06179edea165"
+enable_mutations = false
+
+# Disabled cloud project: missing valid auth mechanism for GraphQL admin/service access
+# [[projects]]
+# subdomain = "bgkrpcjhawoxjnfxufdf"
+# region = "eu-central-1"
+# allow_queries = ["*"]
+# allow_mutations = []
+
+[[projects]]
+subdomain = "local"
+region = "local"
+admin_secret = "nhost-admin-secret"
+allow_queries = ["*"]
+allow_mutations = ["*"]
