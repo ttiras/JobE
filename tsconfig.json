@@ -8,5 +8,5 @@
     "lib": ["ES2021", "DOM"],
     "skipLibCheck": true
   },
-  "include": ["tests/**/*.ts", "vitest.config.ts"]
+  "include": ["tests/**/*.ts", "vitest.config.ts", "tests/helpers/clean-test-sessions.mjs"]
 }

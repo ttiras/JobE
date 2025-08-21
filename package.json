@@ -9,6 +9,8 @@
   "scripts": {
     "test": "vitest",
     "test:run": "vitest run",
-    "test:run:staging": "DOTENV_CONFIG_PATH=.env.staging vitest run"
+    "test:run:staging": "DOTENV_CONFIG_PATH=.env.staging vitest run",
+    "clean:test-sessions": "node tests/helpers/clean-test-sessions.mjs"
+
   }
 }
