@@ -82,3 +82,32 @@
 -- FOR EACH ROW
 -- WHEN (NEW.parent_id IS NOT NULL)
 -- EXECUTE FUNCTION public.departments_prevent_cycles();
+
+-- down: revert departments hierarchy guards
+
+-- 1) Drop trigger (if exists)
+DROP TRIGGER IF EXISTS trg_departments_prevent_cycles ON public.departments;
+
+-- 2) Drop function (if exists)
+DROP FUNCTION IF EXISTS public.departments_prevent_cycles();
+
+-- 3) Drop composite FK (if exists)
+ALTER TABLE public.departments
+  DROP CONSTRAINT IF EXISTS departments_parent_same_org_fk;
+
+-- 4) Drop self-parent check constraint (if exists)
+ALTER TABLE public.departments
+  DROP CONSTRAINT IF EXISTS departments_no_self_parent;
+
+-- 5) Drop supporting unique index on (id, organization_id) if it was created by this migration
+--    (Only drop if no dependent FKs remain referencing it.)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public' AND indexname = 'departments_id_organization_id_uidx'
+  ) THEN
+    -- Ensure no foreign keys still depend on the index (safe after dropping FK above)
+    DROP INDEX IF EXISTS public.departments_id_organization_id_uidx;
+  END IF;
+END$$;

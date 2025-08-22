@@ -80,3 +80,4 @@ ON public.departments
 FOR EACH ROW
 WHEN (NEW.parent_id IS NOT NULL)
 EXECUTE FUNCTION public.departments_prevent_cycles();
+-- 001_departments_hierarchy_guards.sql
