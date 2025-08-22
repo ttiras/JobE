@@ -73,17 +73,18 @@ export async function createDept(orgId: string, props: { code?: string; name?: s
   return data.insert_departments_one as { id: string; organization_id: string; dept_code: string; name: string; parent_id: string | null };
 }
 
-export async function createPosition(orgId: string, deptId: string, props: { title?: string } = {}, user: 'A' | 'B' = 'A') {
+export async function createPosition(orgId: string, deptId: string, props: { title?: string; pos_code?: string } = {}, user: 'A' | 'B' = 'A') {
   const title = props.title ?? `Pos ${testSuffix('pos')}`;
+  const pos_code = props.pos_code ?? testSuffix('pc').replace(/[^a-z0-9]/gi, '').slice(0, 16);
   const q = /* GraphQL */ `
-    mutation($organization_id:uuid!,$department_id:uuid!,$title:String!){
-      insert_positions_one(object:{ organization_id:$organization_id, department_id:$department_id, title:$title }){
-        id organization_id department_id title
+    mutation($organization_id:uuid!,$department_id:uuid!,$title:String!,$pos_code:String!){
+      insert_positions_one(object:{ organization_id:$organization_id, department_id:$department_id, title:$title, pos_code:$pos_code }){
+        id organization_id department_id title pos_code
       }
     }
   `;
-  const data = await gqlAs<{ insert_positions_one: any }>(q, { organization_id: orgId, department_id: deptId, title }, user);
-  return data.insert_positions_one as { id: string; organization_id: string; department_id: string; title: string };
+  const data = await gqlAs<{ insert_positions_one: any }>(q, { organization_id: orgId, department_id: deptId, title, pos_code }, user);
+  return data.insert_positions_one as { id: string; organization_id: string; department_id: string; title: string; pos_code: string };
 }
 
 export async function withTempOrg<T>(fn: (org: { id: string }) => Promise<T>, user: 'A' | 'B' = 'A', input: OrgInput = {}) {

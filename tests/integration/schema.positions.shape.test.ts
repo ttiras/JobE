@@ -1,64 +1,23 @@
 // tests/integration/schema.positions.shape.test.ts
 import { describe, it, expect } from 'vitest';
-import { GRAPHQL_URL, gqlA } from '../helpers/auth';
+import { gqlAdmin, gqlAs } from '../helpers/gql';
+import { createOrg, createDept, createPosition } from '../helpers/factories';
 
-const ENDPOINT =
-  (GRAPHQL_URL && GRAPHQL_URL.trim()) ||
-  process.env.NHOST_GRAPHQL_URL ||
-  process.env.HASURA_GRAPHQL_ENDPOINT ||
-  '';
-
-if (!ENDPOINT) {
-  throw new Error(
-    'GraphQL endpoint missing. Set NHOST_GRAPHQL_URL (preferred) or HASURA_GRAPHQL_ENDPOINT.'
-  );
-}
-
-// Support either env name for convenience
-const ADMIN = process.env.HASURA_ADMIN_SECRET || process.env.HASURA_GRAPHQL_ADMIN_SECRET;
-
-// --- Admin query (bypass RLS) ------------------------------------------------
-async function gqlAdmin<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(ADMIN ? { 'x-hasura-admin-secret': ADMIN } : {}),
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  const text = await res.text();
-  try {
-    return (text ? JSON.parse(text) : {}) as T;
-  } catch {
-    return { errors: [{ message: `Invalid JSON from server: ${text.slice(0, 300)}` }] } as T;
-  }
-}
-
-// Normalize either shape (admin vs user) into a single array of field names
 function extractFieldNames(resp: any): string[] {
   const fields = resp?.data?.__type?.fields ?? resp?.__type?.fields ?? [];
   return Array.isArray(fields) ? fields.map((f: any) => f?.name).filter(Boolean) : [];
 }
 
 describe('positions schema', () => {
-  it('exposes expected columns on positions object', async () => {
-    const q = /* GraphQL */ `
-      query {
-        __type(name: "positions") {
-          fields { name }
-        }
-      }
+  it('exposes expected columns and incumbents_count (no fte) with default = 1', async () => {
+    // Introspect schema fields
+    const introspect = /* GraphQL */ `
+      query { __type(name: "positions") { fields { name } } }
     `;
-
-    const resp = ADMIN
-      ? await gqlAdmin<any>(q)
-      : await gqlA<any>(q);
-
-    const namesArr = extractFieldNames(resp);
+    const schemaResp = await gqlAdmin<any>(introspect);
+    const namesArr = extractFieldNames(schemaResp);
     const names = new Set(namesArr);
 
-    // Core columns expected
     const core = [
       'id',
       'organization_id',
@@ -70,23 +29,34 @@ describe('positions schema', () => {
       'is_active',
       'created_at',
       'updated_at',
+      'incumbents_count', // required
     ];
 
-    // deleted_at must be gone
+    // deleted_at removed across all tables
     expect(names.has('deleted_at')).toBe(false);
-
-    // Either incumbents_count (preferred) or fte (legacy)
-    const hasIncumbentsOrFte = names.has('incumbents_count') || names.has('fte');
+    // fte should not exist
+    expect(names.has('fte')).toBe(false);
 
     const missingCore = core.filter(c => !names.has(c));
-    if (missingCore.length || !hasIncumbentsOrFte) {
+    if (missingCore.length) {
       throw new Error(
-        `positions is missing fields: ${missingCore.join(', ') || '(core ok)'}; ` +
-          `and incumbents_count/fte present? ${hasIncumbentsOrFte}\n` +
-          `Got fields: ${namesArr.sort().join(', ')}`
+        `positions missing fields: ${missingCore.join(', ')}\nGot: ${namesArr.sort().join(', ')}`
       );
     }
 
-    expect(true).toBe(true);
+    // Runtime check: create minimal org/dept/position and ensure incumbents_count defaults to 1
+    const org = await createOrg({ size: 'S2_10', country: 'US', industry: 'CONSUMER' }, 'A');
+    const dept = await createDept(org.id, {}, 'A');
+    const pos = await createPosition(org.id, dept.id, { title: 'Schema Test Position' }, 'A');
+
+    const byPk = /* GraphQL */ `
+      query($id: uuid!) {
+        positions_by_pk(id: $id) { id incumbents_count pos_code }
+      }
+    `;
+    const fetched = await gqlAs<{ positions_by_pk: { id: string; incumbents_count: number; pos_code: string } | null }>(byPk, { id: pos.id }, 'A');
+    expect(fetched.positions_by_pk?.id).toBe(pos.id);
+    expect(fetched.positions_by_pk?.incumbents_count).toBe(1);
+    expect(fetched.positions_by_pk?.pos_code).toBeTruthy();
   });
 });
