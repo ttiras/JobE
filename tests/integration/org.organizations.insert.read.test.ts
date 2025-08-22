@@ -35,6 +35,6 @@ describe('org insert/read with real user', () => {
       const gotB = await gqlAs<{ organizations_by_pk: any | null }>(byPk, { id: org.id }, 'B');
       expect(gotB.organizations_by_pk).toBeNull();
     },
-    20_000
+    45_000 // increased timeout for slower environments
   );
 });

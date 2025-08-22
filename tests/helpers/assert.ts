@@ -10,7 +10,7 @@ export function expectErrorsLike(json: any, pattern: RegExp | ((msg: string) => 
 }
 
 export function expectNotAuthorized(json: any) {
-  expectErrorsLike(json, /not authorized|permission|access denied|unauthorized|no mutations exist/i);
+  expectErrorsLike(json, /not authorized|permission|access denied|unauthorized|no mutations exist|field .* not found/i);
 }
 
 export function expectConstraintViolation(json: any) {

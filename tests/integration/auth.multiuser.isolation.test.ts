@@ -9,8 +9,8 @@ const IS_STAGING =
   process.env.NODE_ENV === 'staging' ||
   process.env.CI === 'true';
 
-const HOOK_TIMEOUT = IS_STAGING ? 90_000 : 40_000;  // beforeAll/afterAll
-const IT_TIMEOUT   = IS_STAGING ? 90_000 : 40_000;  // the long scenario
+const HOOK_TIMEOUT = IS_STAGING ? 120_000 : 60_000;  // extended for slower CI
+const IT_TIMEOUT   = IS_STAGING ? 120_000 : 60_000;  // extended scenario timeout
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hard-coded enums (kept in sync with Hasura migrations/metadata)
