@@ -35,23 +35,32 @@ async function gqlAdmin<T>(query: string, variables?: Record<string, unknown>): 
 }
 
 describe('org_size enum', () => {
-  it('is exposed as a GraphQL ENUM with at least one value', async () => {
+  it('matches expected enum values', async () => {
     const query = /* GraphQL */ `
-      query {
-        __type(name: "org_size_enum") {
-          kind
-          name
-          enumValues { name }
-        }
-      }
+      query { __type(name: "org_size_enum") { kind name enumValues { name } } }
     `;
 
     const json = await gqlAdmin<{
       data: { __type: { kind: string; name: string; enumValues: { name: string }[] } | null };
     }>(query);
 
+    const expected = [
+      'S2_10',
+      'S11_50',
+      'S51_200',
+      'S201_500',
+      'S501_1000',
+      'S1001_5000',
+      'S5001_10000',
+      'S10001_PLUS',
+    ];
+
     expect(json?.data?.__type?.kind).toBe('ENUM');
     expect(json?.data?.__type?.name).toBe('org_size_enum');
-    expect((json?.data?.__type?.enumValues ?? []).length).toBeGreaterThan(0);
+
+    const values = (json?.data?.__type?.enumValues ?? []).map(v => v.name).sort();
+    expect(values).toEqual([...expected].sort());
+    // Ensure no duplicates
+    expect(new Set(values).size).toBe(expected.length);
   });
 });

@@ -1,61 +1,25 @@
 // tests/auth.anonymous.cannot-insert-org.test.ts
 import { describe, it, expect } from 'vitest';
-import { GRAPHQL_URL } from '../helpers/auth';
-
-const ENDPOINT =
-  (GRAPHQL_URL && GRAPHQL_URL.trim()) ||
-  process.env.NHOST_GRAPHQL_URL ||
-  process.env.HASURA_GRAPHQL_ENDPOINT ||
-  '';
-
-if (!ENDPOINT) {
-  throw new Error(
-    'GraphQL endpoint missing. Set NHOST_GRAPHQL_URL (preferred) or HASURA_GRAPHQL_ENDPOINT.'
-  );
-}
-
-// Anonymous GraphQL call: no auth headers on purpose
-async function gqlAnonymous<T>(query: string, variables?: Record<string, unknown>) {
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' }, // no Authorization
-    body: JSON.stringify({ query, variables }),
-  });
-  const text = await res.text();
-  try {
-    return (text ? JSON.parse(text) : {}) as T;
-  } catch {
-    // Return a shape similar to GraphQL error for assertion readability
-    return { errors: [{ message: `Invalid JSON from server: ${text.slice(0, 300)}` }] } as T;
-  }
-}
+import { gqlAnon } from '../helpers/gql';
 
 describe('permissions: anonymous', () => {
   it('cannot insert an organization', async () => {
     const q = /* GraphQL */ `
-      mutation($name:String!, $industry:String!){
-        insert_organizations_one(object:{
-          name:$name, industry:$industry
-        }) { id }
+      mutation($name:String!, $industry:industries_enum_enum!, $country:countries_enum_enum!, $size:org_size_enum!){
+        insert_organizations_one(object:{ name:$name, industry:$industry, country:$country, size:$size }) { id }
       }
     `;
 
-    const json: any = await gqlAnonymous(q, {
-      name: 'Anon Org',
-      industry: 'OTHER',
-    });
+    const vars = { name: 'Anon Org', industry: 'CONSUMER', country: 'US', size: 'S2_10' };
+    const json: any = await gqlAnon(q, vars);
 
-    // Should be blocked by Hasura permissions
     expect(Array.isArray(json?.errors)).toBe(true);
 
-    const msg = (json.errors ?? [])
-      .map((e: any) => e?.message ?? '')
-      .join(' | ')
-      .toLowerCase();
+    const msg = (json.errors || []).map((e: any) => e?.message || '').join(' | ');
+    expect(msg).not.toMatch(/null value|constraint|violates|foreign key|missing/i);
 
-    // Cover common Hasura/GraphQL phrasing
-    expect(msg).toMatch(
-      /not authorized|permission|access denied|unauthorized|no mutations exist/
-    );
+    const first = json.errors[0] || {};
+    expect(first.message).toMatch(/no mutations exist/i);
+    expect(first?.extensions?.code).toBe('validation-failed');
   });
 });

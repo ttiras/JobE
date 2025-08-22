@@ -1,52 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { gqlA, sessionA, testSuffix } from '../helpers/auth';
+import { sessionA } from '../helpers/auth';
+import { createOrg } from '../helpers/factories';
+import { gqlAs } from '../helpers/gql';
 
 describe('org insert/read with real user', () => {
   it(
     'inserts an org using all required fields and reads it back',
     async () => {
       const { userId } = await sessionA();
-      const ts = testSuffix('org-read');
+      const org = await createOrg({ industry: 'CONSUMER', country: 'US', size: 'S2_10' }, 'A');
 
-      // hard-coded enums instead of introspection
-      const industry = 'CONSUMER';   // industries_enum_enum
-      const country  = 'US';     // countries_enum_enum
-      const size     = 'S2_10';  // org_size_enum
+      expect(org.created_by).toBe(userId);
+      expect(org.industry).toBe('CONSUMER');
+      expect(org.country).toBe('US');
+      expect(org.size).toBe('S2_10');
+      expect(org.currency).toBe('USD');
 
-      const expectedCurrency = 'USD';
-
-      const insert = /* GraphQL */ `
-        mutation($name:String!,$industry:industries_enum_enum!,$country:countries_enum_enum!,$size:org_size_enum!){
-          insert_organizations_one(object:{
-            name:$name, industry:$industry, country:$country, size:$size
-          }){ id created_by industry country size currency }
-        }
-      `;
-      const name = `E2E Org ${ts}`;
-      const ins = await gqlA<{ insert_organizations_one: {
-        id: string; created_by: string; industry: string; country: string; size: string; currency: string;
-      } }>(insert, { name, industry, country, size });
-
-      const row = ins.insert_organizations_one;
-      expect(row.created_by).toBe(userId);
-      expect(row.industry).toBe(industry);
-      expect(row.country).toBe(country);
-      expect(row.size).toBe(size);
-      expect(row.currency).toBe(expectedCurrency);
-
-      const query = /* GraphQL */ `
-        query($id:uuid!){
-          organizations_by_pk(id:$id){
+      // Read-after-write: creator should be able to read
+      const byPk = /* GraphQL */ `
+        query($id: uuid!) {
+          organizations_by_pk(id: $id) {
             id created_by name industry country size currency
           }
         }
       `;
-      const got = await gqlA<{ organizations_by_pk: {
+      const gotA = await gqlAs<{ organizations_by_pk: {
         id: string; created_by: string; name: string; industry: string; country: string; size: string; currency: string;
-      } | null }>(query, { id: row.id });
+      } | null }>(byPk, { id: org.id }, 'A');
 
-      expect(got.organizations_by_pk?.id).toBe(row.id);
-      expect(got.organizations_by_pk?.created_by).toBe(userId);
+      expect(gotA.organizations_by_pk?.id).toBe(org.id);
+      expect(gotA.organizations_by_pk?.created_by).toBe(userId);
+
+      // A different user should not be able to read under RLS
+      const gotB = await gqlAs<{ organizations_by_pk: any | null }>(byPk, { id: org.id }, 'B');
+      expect(gotB.organizations_by_pk).toBeNull();
     },
     20_000
   );
